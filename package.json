@@ -1,0 +1,23 @@
+{
+  "name": "@react-rte/lib",
+  "version": "1.0.0",
+  "description": "A reusable Rich Text Editor built with React",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "test": "echo \"No tests specified\""
+  }
+}
+
