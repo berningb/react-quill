@@ -1,5 +1,5 @@
 {
-  "name": "@react-rte/lib",
+  "name": "@react-quill/lib",
   "version": "1.0.0",
   "description": "A reusable Rich Text Editor built with React",
   "type": "module",
