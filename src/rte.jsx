@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { htmlToMarkdown, markdownToHtml } from './utils/markdown';
 import { getCurrentFormat, getCurrentListType, getActiveFormats } from './utils/formatTracking';
 import { Toolbar } from './components/Toolbar';
@@ -44,18 +44,30 @@ export const RichTextEditor = ({
   const [currentList, setCurrentList] = useState('none');
   const [currentLineSpacing, setCurrentLineSpacing] = useState('1.5');
 
-  // Helper: Update all state and format tracking (DRY - used in 3 places)
+  // Helper: Get current HTML directly from DOM
+  const getCurrentHtml = useCallback(() => {
+    if (mode === 'wysiwyg' && editorRef.current) {
+      // Use innerHTML for consistency with handleInput
+      const html = editorRef.current.innerHTML;
+      console.log('🔍🔍🔍 getCurrentHtml - HTML length:', html.length);
+      console.log('🔍🔍🔍 getCurrentHtml - Contains style=:', html.includes('style='));
+      console.log('🔍🔍🔍 getCurrentHtml - HTML:', html.substring(0, 500));
+      return html;
+    }
+    return state.html;
+  }, [mode, state.html]);
+
+  // Helper: Update state (only when necessary, not on every keystroke)
   const updateEditorState = useCallback(() => {
     if (!editorRef.current) return;
-
+    
     const html = editorRef.current.innerHTML;
     const text = editorRef.current.textContent || '';
     const markdown = htmlToMarkdown(html);
 
-    // Update content state
     setState(prev => ({
       ...prev,
-      html,
+      html: mode === 'wysiwyg' ? prev.html : html, // Don't update html in wysiwyg - read from DOM
       content: text,
       markdown,
     }));
@@ -75,15 +87,20 @@ export const RichTextEditor = ({
     if (onChange) {
       onChange(text, html, markdown);
     }
-  }, [onChange]);
+  }, [onChange, mode]);
 
   // Execute document command
   const execCommand = useCallback((command, value) => {
+    if (!editorRef.current) return;
+    
     document.execCommand(command, false, value);
-    if (editorRef.current) {
-      editorRef.current.focus();
-      updateEditorState();
-    }
+    editorRef.current.focus();
+    
+    requestAnimationFrame(() => {
+      if (editorRef.current) {
+        updateEditorState();
+      }
+    });
   }, [updateEditorState]);
 
   // Handle format dropdown change
@@ -132,51 +149,12 @@ export const RichTextEditor = ({
     setCurrentLineSpacing(lineSpacing);
     
     if (editorRef.current) {
-      // Apply line-height using CSS custom property and inline style
       editorRef.current.style.setProperty('--editor-line-height', lineSpacing);
       editorRef.current.style.lineHeight = lineSpacing;
-      
-      // Force line-height on all elements to ensure inheritance works
-      // This is critical for pasted content that might have its own styles
-      const allElements = editorRef.current.querySelectorAll('*');
-      allElements.forEach(el => {
-        // Remove any existing line-height from style object
-        if (el.style.lineHeight) {
-          el.style.lineHeight = '';
-        }
-        // Remove from style attribute
-        if (el.hasAttribute('style')) {
-          const style = el.getAttribute('style');
-          if (style) {
-            const cleaned = style.replace(/line-height\s*:\s*[^;]+;?/gi, '').trim();
-            if (cleaned) {
-              el.setAttribute('style', cleaned);
-            } else {
-              el.removeAttribute('style');
-            }
-          }
-        }
-        // Force inheritance - set to empty string so it inherits from parent
-        el.style.lineHeight = '';
-        // Use CSS to force inheritance
-        el.style.setProperty('line-height', 'inherit', 'important');
-      });
-      
-      // Use a small delay to ensure DOM has updated, then verify
-      requestAnimationFrame(() => {
-        if (editorRef.current) {
-          // Double-check the editor container has the line-height
-          editorRef.current.style.setProperty('--editor-line-height', lineSpacing);
-          editorRef.current.style.lineHeight = lineSpacing;
-          updateEditorState();
-        }
-      });
-      
-      updateEditorState();
     }
-  }, [updateEditorState]);
+  }, []);
 
-  // Handle paste events - remove background colors from pasted HTML
+  // Handle paste events - clean pasted content
   const handlePaste = useCallback((event) => {
     if (!editorRef.current || mode !== 'wysiwyg') return;
     
@@ -188,143 +166,36 @@ export const RichTextEditor = ({
     let pastedHtml = clipboardData.getData('text/html');
     const pastedText = clipboardData.getData('text/plain');
     
-    // If HTML is available, clean it; otherwise use plain text
     if (pastedHtml) {
-      // Create a temporary div to parse and clean the HTML
       const temp = document.createElement('div');
       temp.innerHTML = pastedHtml;
       
-      // Remove background-color and line-height from all elements and text nodes' parent elements
+      // Remove background colors and unwanted styles from pasted content
       const allElements = temp.querySelectorAll('*');
       allElements.forEach(el => {
-        // Remove inline background-color styles
-        if (el.style.backgroundColor) {
-          el.style.backgroundColor = '';
-        }
-        if (el.style.background) {
-          el.style.background = '';
-        }
+        if (el.style.backgroundColor) el.style.backgroundColor = '';
+        if (el.style.background) el.style.background = '';
         
-        // Remove line-height from pasted elements (we'll use the editor's line spacing)
-        if (el.style.lineHeight) {
-          el.style.lineHeight = '';
-        }
-        
-        // Remove padding and margin that might interfere with line spacing
-        if (el.style.padding) {
-          el.style.padding = '';
-        }
-        if (el.style.paddingTop) {
-          el.style.paddingTop = '';
-        }
-        if (el.style.paddingBottom) {
-          el.style.paddingBottom = '';
-        }
-        if (el.style.paddingLeft) {
-          el.style.paddingLeft = '';
-        }
-        if (el.style.paddingRight) {
-          el.style.paddingRight = '';
-        }
-        if (el.style.margin) {
-          el.style.margin = '';
-        }
-        if (el.style.marginTop) {
-          el.style.marginTop = '';
-        }
-        if (el.style.marginBottom) {
-          el.style.marginBottom = '';
-        }
-        if (el.style.marginLeft) {
-          el.style.marginLeft = '';
-        }
-        if (el.style.marginRight) {
-          el.style.marginRight = '';
-        }
-        
-        // Clean style attribute more thoroughly
+        // Clean style attribute
         if (el.hasAttribute('style')) {
           const style = el.getAttribute('style');
           if (style) {
-            // Remove all background-related CSS properties, line-height, padding, and margin
-            const cleanedStyle = style
-              .replace(/background-color\s*:\s*[^;]+;?/gi, '')
-              .replace(/background\s*:\s*[^;]+;?/gi, '')
-              .replace(/background-image\s*:\s*[^;]+;?/gi, '')
-              .replace(/background-position\s*:\s*[^;]+;?/gi, '')
-              .replace(/background-repeat\s*:\s*[^;]+;?/gi, '')
-              .replace(/background-size\s*:\s*[^;]+;?/gi, '')
-              .replace(/background-attachment\s*:\s*[^;]+;?/gi, '')
-              .replace(/line-height\s*:\s*[^;]+;?/gi, '') // Remove line-height
-              .replace(/padding\s*:\s*[^;]+;?/gi, '') // Remove padding
-              .replace(/padding-top\s*:\s*[^;]+;?/gi, '')
-              .replace(/padding-bottom\s*:\s*[^;]+;?/gi, '')
-              .replace(/padding-left\s*:\s*[^;]+;?/gi, '')
-              .replace(/padding-right\s*:\s*[^;]+;?/gi, '')
-              .replace(/margin\s*:\s*[^;]+;?/gi, '') // Remove margin
-              .replace(/margin-top\s*:\s*[^;]+;?/gi, '')
-              .replace(/margin-bottom\s*:\s*[^;]+;?/gi, '')
-              .replace(/margin-left\s*:\s*[^;]+;?/gi, '')
-              .replace(/margin-right\s*:\s*[^;]+;?/gi, '')
-              .replace(/;\s*;/g, ';') // Remove double semicolons
-              .replace(/^\s*;\s*|\s*;\s*$/g, '') // Remove leading/trailing semicolons
+            const cleaned = style
+              .replace(/background[^:]*:\s*[^;]+;?/gi, '')
+              .replace(/bgcolor[^:]*:\s*[^;]+;?/gi, '')
               .trim();
-            if (cleanedStyle) {
-              el.setAttribute('style', cleanedStyle);
+            if (cleaned) {
+              el.setAttribute('style', cleaned);
             } else {
               el.removeAttribute('style');
             }
           }
         }
         
-        // Remove bgcolor attribute if present
         if (el.hasAttribute('bgcolor')) {
           el.removeAttribute('bgcolor');
         }
-        
-        // Remove background-related classes (common in pasted content)
-        if (el.className) {
-          const classes = el.className.split(/\s+/).filter(cls => {
-            // Remove classes that might contain background colors, padding, or margin
-            return !cls.match(/^(bg-|background|highlight|hl-|mark|p-|m-|padding|margin)/i);
-          });
-          if (classes.length > 0) {
-            el.className = classes.join(' ');
-          } else {
-            el.removeAttribute('class');
-          }
-        }
       });
-      
-      // Also process text nodes' parent elements (in case they have background styles, line-height, padding, or margin)
-      const walker = document.createTreeWalker(
-        temp,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
-      let textNode;
-      while (textNode = walker.nextNode()) {
-        const parent = textNode.parentElement;
-        if (parent && parent !== temp) {
-          if (parent.style.backgroundColor || parent.style.background) {
-            parent.style.backgroundColor = '';
-            parent.style.background = '';
-          }
-          if (parent.style.lineHeight) {
-            parent.style.lineHeight = '';
-          }
-          if (parent.style.padding || parent.style.paddingTop || parent.style.paddingBottom) {
-            parent.style.padding = '';
-            parent.style.paddingTop = '';
-            parent.style.paddingBottom = '';
-          }
-          if (parent.style.margin || parent.style.marginTop || parent.style.marginBottom) {
-            parent.style.margin = '';
-            parent.style.marginTop = '';
-            parent.style.marginBottom = '';
-          }
-        }
-      }
       
       pastedHtml = temp.innerHTML;
     }
@@ -348,80 +219,40 @@ export const RichTextEditor = ({
         range.insertNode(textNode);
       }
       
-      // Move cursor to end of inserted content
       range.collapse(false);
       selection.removeAllRanges();
       selection.addRange(range);
     }
     
-    // Update editor state and clean up any remaining background colors
-    updateEditorState();
-    
-    // Final cleanup pass - remove any background colors, line-height, padding, and margin that might have slipped through
-    if (editorRef.current) {
-      requestAnimationFrame(() => {
-        if (!editorRef.current) return;
-        const allElements = editorRef.current.querySelectorAll('*');
-        allElements.forEach(el => {
-          // Remove background colors
-          if (el.style.backgroundColor || el.style.background) {
-            el.style.backgroundColor = '';
-            el.style.background = '';
-          }
-          // Remove line-height, padding, and margin from child elements (editor container has the line spacing)
-          if (el !== editorRef.current) {
-            if (el.style.lineHeight) {
-              el.style.lineHeight = '';
-            }
-            if (el.style.padding || el.style.paddingTop || el.style.paddingBottom) {
-              el.style.padding = '';
-              el.style.paddingTop = '';
-              el.style.paddingBottom = '';
-              el.style.paddingLeft = '';
-              el.style.paddingRight = '';
-            }
-            if (el.style.margin || el.style.marginTop || el.style.marginBottom) {
-              el.style.margin = '';
-              el.style.marginTop = '';
-              el.style.marginBottom = '';
-              el.style.marginLeft = '';
-              el.style.marginRight = '';
-            }
-          }
-          const style = el.getAttribute('style');
-          if (style && (style.includes('background') || style.includes('bgcolor') || style.includes('line-height') || style.includes('padding') || style.includes('margin'))) {
-            const cleaned = style
-              .replace(/background[^:]*:\s*[^;]+;?/gi, '')
-              .replace(/bgcolor[^:]*:\s*[^;]+;?/gi, '')
-              .replace(/line-height\s*:\s*[^;]+;?/gi, '') // Remove line-height
-              .replace(/padding[^:]*:\s*[^;]+;?/gi, '') // Remove padding
-              .replace(/margin[^:]*:\s*[^;]+;?/gi, '') // Remove margin
-              .trim();
-            if (cleaned) {
-              el.setAttribute('style', cleaned);
-            } else {
-              el.removeAttribute('style');
-            }
-          }
-        });
-        // Ensure editor's line spacing is still applied
-        if (currentLineSpacing && editorRef.current) {
-          editorRef.current.style.lineHeight = currentLineSpacing;
-        }
+    // Update state after paste
+    requestAnimationFrame(() => {
+      if (editorRef.current) {
         updateEditorState();
-      });
-    }
-  }, [mode, updateEditorState, currentLineSpacing]);
+      }
+    });
+  }, [mode, updateEditorState]);
 
-  // Handle content changes
+  // Handle content changes - minimal updates
   const handleInput = useCallback(() => {
-    updateEditorState();
-  }, [updateEditorState]);
+    if (editorRef.current) {
+      const text = editorRef.current.textContent || '';
+      const html = editorRef.current.innerHTML;
+      setState(prev => ({ 
+        ...prev, 
+        content: text,
+        html: html, // Keep state.html in sync for preview
+      }));
+      
+      // Notify parent with HTML from DOM
+      if (onChange) {
+        onChange(text, html, htmlToMarkdown(html));
+      }
+    }
+  }, [onChange]);
 
   // Handle selection changes
   const handleSelect = useCallback(() => {
     if (editorRef.current) {
-      // Track selection range
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
@@ -433,10 +264,8 @@ export const RichTextEditor = ({
           },
         }));
       }
-      
-      updateEditorState();
     }
-  }, [updateEditorState]);
+  }, []);
 
   // Handle markdown textarea changes
   const handleMarkdownInput = useCallback(() => {
@@ -481,7 +310,23 @@ export const RichTextEditor = ({
   // Toggle between modes
   const toggleMode = useCallback((action) => {
     if (action === 'preview') {
-      setShowPreview(prev => !prev);
+      console.log('🔍🔍🔍 TOGGLE PREVIEW CLICKED - current showPreview:', showPreview);
+      console.log('🔍🔍🔍 Editor ref exists:', !!editorRef.current);
+      
+      // When toggling preview ON, capture the current HTML from the editor
+      if (!showPreview && editorRef.current && mode === 'wysiwyg') {
+        const html = getCurrentHtml();
+        console.log('🔍🔍🔍 Capturing HTML for preview:', html.substring(0, 200));
+        setState(prev => ({
+          ...prev,
+          html: html || prev.html,
+        }));
+      }
+      
+      setShowPreview(prev => {
+        console.log('🔍🔍🔍 Setting showPreview to:', !prev);
+        return !prev;
+      });
       return;
     }
     
@@ -513,62 +358,47 @@ export const RichTextEditor = ({
     }
     
     setShowPreview(false);
-  }, [mode]);
+  }, [mode, showPreview, getCurrentHtml]);
   
-  // Track previous mode to detect mode changes
+  // Track previous mode
   const prevModeRef = useRef(mode);
   
-  // Sync content when mode changes (not on every state.html change)
+  // Sync content when mode changes
   useEffect(() => {
-    if (mode === 'wysiwyg' && editorRef.current && state.html) {
-      // Only update if mode actually changed, not on every state update
-      if (prevModeRef.current !== mode) {
-        editorRef.current.innerHTML = state.html;
-        // Apply line spacing when switching to WYSIWYG mode
-        if (currentLineSpacing) {
-          editorRef.current.style.lineHeight = currentLineSpacing;
-        }
-        prevModeRef.current = mode;
+    if (mode === 'wysiwyg' && editorRef.current && state.html && prevModeRef.current !== mode) {
+      editorRef.current.innerHTML = state.html;
+      if (currentLineSpacing) {
+        editorRef.current.style.lineHeight = currentLineSpacing;
       }
+      prevModeRef.current = mode;
     } else {
       prevModeRef.current = mode;
     }
-  }, [mode, currentLineSpacing]); // Removed state.html from dependencies
+  }, [mode, currentLineSpacing, state.html]);
 
-  // Track previous preview state
-  const prevPreviewRef = useRef(showPreview);
+  // Track previous showPreview state
+  const prevShowPreviewRef = useRef(showPreview);
   
-  // Sync content when preview is toggled off (restore editor content)
+  // Restore HTML to editor when switching back from preview to edit
   useEffect(() => {
-    // Only sync when preview state actually changes (turned off), not on every state.html change
-    if (prevPreviewRef.current !== showPreview && !showPreview && mode === 'wysiwyg' && editorRef.current && state.html) {
-      // Only update if content is different to avoid cursor issues
-      if (editorRef.current.innerHTML !== state.html) {
-        editorRef.current.innerHTML = state.html;
+    // When switching from preview (true) to edit (false) in wysiwyg mode
+    if (mode === 'wysiwyg' && prevShowPreviewRef.current === true && !showPreview && editorRef.current && state.html) {
+      console.log('🔍🔍🔍 Restoring HTML to editor:', state.html.substring(0, 100));
+      editorRef.current.innerHTML = state.html;
+      if (currentLineSpacing) {
+        editorRef.current.style.lineHeight = currentLineSpacing;
       }
-      prevPreviewRef.current = showPreview;
-    } else if (prevPreviewRef.current !== showPreview) {
-      prevPreviewRef.current = showPreview;
     }
-  }, [showPreview, mode]); // Removed state.html from dependencies
+    prevShowPreviewRef.current = showPreview;
+  }, [showPreview, mode, state.html, currentLineSpacing]);
 
-  // Track if editor has been initialized to prevent resets during typing
+  // Track if editor has been initialized
   const initializedRef = useRef(false);
-  const initialContentRef = useRef(initialContent);
   
-  // Update ref when initialContent changes (for new files)
-  useEffect(() => {
-    if (initialContent !== initialContentRef.current) {
-      initializedRef.current = false;
-      initialContentRef.current = initialContent;
-    }
-  }, [initialContent]);
-  
-  // Initialize editor with content - only once per initialContent value
+  // Initialize editor with content
   useEffect(() => {
     if (!initializedRef.current && initialContent) {
       if (editorRef.current && mode === 'wysiwyg') {
-        // Only set if editor is empty or content is different
         if (!editorRef.current.innerHTML || editorRef.current.innerHTML !== initialContent) {
           editorRef.current.innerHTML = initialContent;
           setState(prev => ({
@@ -577,38 +407,35 @@ export const RichTextEditor = ({
             html: initialContent,
             markdown: htmlToMarkdown(initialContent),
           }));
+          initializedRef.current = true;
+        } else {
+          initializedRef.current = true;
         }
-      }
-      
-      if (markdownRef.current && mode === 'markdown') {
+      } else if (markdownRef.current && mode === 'markdown') {
         const newMarkdown = htmlToMarkdown(initialContent);
-        if (markdownRef.current.value !== newMarkdown) {
-          markdownRef.current.value = newMarkdown;
-          setState(prev => ({
-            ...prev,
-            markdown: newMarkdown,
-            html: initialContent,
-          }));
-        }
+        markdownRef.current.value = newMarkdown;
+        setState(prev => ({
+          ...prev,
+          markdown: newMarkdown,
+          html: initialContent,
+        }));
+        initializedRef.current = true;
+      } else if (htmlRef.current && mode === 'html') {
+        htmlRef.current.value = initialContent;
+        setState(prev => ({
+          ...prev,
+          html: initialContent,
+          markdown: htmlToMarkdown(initialContent),
+        }));
+        initializedRef.current = true;
+      } else {
+        initializedRef.current = true;
       }
-      
-      if (htmlRef.current && mode === 'html') {
-        if (htmlRef.current.value !== initialContent) {
-          htmlRef.current.value = initialContent;
-          setState(prev => ({
-            ...prev,
-            html: initialContent,
-            markdown: htmlToMarkdown(initialContent),
-          }));
-        }
-      }
-      
-      initializedRef.current = true;
     }
   }, [initialContent, mode]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded overflow-hidden flex flex-col w-full h-full">
+    <div className="bg-white border border-gray-200 rounded overflow-hidden flex flex-col w-full h-full min-h-0">
       <Toolbar
         mode={mode}
         showPreview={showPreview}
@@ -643,6 +470,7 @@ export const RichTextEditor = ({
         highlightWordColors={highlightWordColors}
         onWordClick={onWordClick}
         lineSpacing={currentLineSpacing}
+        getCurrentHtml={getCurrentHtml}
       />
 
       <CharCount
@@ -653,4 +481,3 @@ export const RichTextEditor = ({
     </div>
   );
 };
-

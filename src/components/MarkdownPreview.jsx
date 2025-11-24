@@ -24,17 +24,29 @@ function highlightWordsMultiColor(html, wordColorMap) {
 }
 
 export const MarkdownPreview = ({ html, highlightWords: wordsToHighlight = [], highlightWordColors = null, onWordClick = null, lineSpacing = null }) => {
+  console.log('🔍🔍🔍 MarkdownPreview RENDERED with html:', html?.substring(0, 100));
   const previewRef = useRef(null);
   
+  // Debug: Log what HTML we're receiving
+  console.log('🔍 MarkdownPreview received HTML:', html);
+  console.log('🔍 MarkdownPreview HTML length:', html?.length);
+  console.log('🔍 MarkdownPreview contains <br>:', html?.includes('<br'));
+  console.log('🔍 MarkdownPreview contains style=:', html?.includes('style='));
+  
+  // Preserve the original HTML with all inline styles intact
   let highlightedHtml = html || '';
   
   // Use multi-color highlighting if wordColorMap is provided
+  // Note: Highlighting functions preserve inline styles by only wrapping text content, not modifying style attributes
   if (highlightWordColors && highlightWordColors.length > 0) {
     highlightedHtml = highlightWordsMultiColor(html || '', highlightWordColors);
   } else if (wordsToHighlight && wordsToHighlight.length > 0) {
     // Fall back to single-color highlighting
     highlightedHtml = highlightWords(html || '', wordsToHighlight);
   }
+  
+  console.log('🔍 MarkdownPreview after highlighting:', highlightedHtml.substring(0, 200));
+
 
   // Handle word clicks in preview mode
   useEffect(() => {
@@ -119,12 +131,14 @@ export const MarkdownPreview = ({ html, highlightWords: wordsToHighlight = [], h
   }, [previewRef, html, onWordClick]);
 
   return (
-    <div 
-      ref={previewRef}
-      className="min-h-[300px] p-5 text-base overflow-y-auto flex-1 bg-white [&_h1]:text-3xl [&_h1]:my-3 [&_h1]:font-bold [&_h2]:text-2xl [&_h2]:my-3 [&_h2]:font-bold [&_h3]:text-xl [&_h3]:my-3 [&_h3]:font-bold [&_p]:my-2 [&_ul]:my-2 [&_ul]:pl-8 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:pl-8 [&_ol]:list-decimal [&_li]:my-1 [&_li]:ml-4 [&_strong]:font-bold [&_em]:italic [&_u]:underline [&_a]:text-blue-500 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_.rte-highlight]:bg-yellow-200 [&_.rte-highlight]:px-0.5 [&_.rte-highlight]:rounded cursor-pointer" 
-      style={{ lineHeight: lineSpacing || '1.5' }}
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }} 
-    />
+    <div className="flex-1 overflow-auto min-h-0">
+      <div 
+        ref={previewRef}
+        className="p-5 outline-none text-base bg-white [&_h1]:text-3xl [&_h1]:my-3 [&_h1]:font-bold [&_h2]:text-2xl [&_h2]:my-3 [&_h2]:font-bold [&_h3]:text-xl [&_h3]:my-3 [&_h3]:font-bold [&_p]:my-2 [&_ul]:my-2 [&_ul]:pl-8 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:pl-8 [&_ol]:list-decimal [&_li]:my-1 [&_li]:ml-4 [&_strong]:font-bold [&_em]:italic [&_u]:underline [&_a]:text-blue-500 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_.rte-highlight]:bg-yellow-200 [&_.rte-highlight]:px-0.5 [&_.rte-highlight]:rounded cursor-pointer" 
+        style={{ '--editor-line-height': lineSpacing || '1.5', lineHeight: lineSpacing || '1.5' }}
+        dangerouslySetInnerHTML={{ __html: highlightedHtml }} 
+      />
+    </div>
   );
 };
 
