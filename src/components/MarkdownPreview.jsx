@@ -24,14 +24,7 @@ function highlightWordsMultiColor(html, wordColorMap) {
 }
 
 export const MarkdownPreview = ({ html, highlightWords: wordsToHighlight = [], highlightWordColors = null, onWordClick = null, lineSpacing = null }) => {
-  console.log('🔍🔍🔍 MarkdownPreview RENDERED with html:', html?.substring(0, 100));
   const previewRef = useRef(null);
-  
-  // Debug: Log what HTML we're receiving
-  console.log('🔍 MarkdownPreview received HTML:', html);
-  console.log('🔍 MarkdownPreview HTML length:', html?.length);
-  console.log('🔍 MarkdownPreview contains <br>:', html?.includes('<br'));
-  console.log('🔍 MarkdownPreview contains style=:', html?.includes('style='));
   
   // Preserve the original HTML with all inline styles intact
   let highlightedHtml = html || '';
@@ -44,8 +37,6 @@ export const MarkdownPreview = ({ html, highlightWords: wordsToHighlight = [], h
     // Fall back to single-color highlighting
     highlightedHtml = highlightWords(html || '', wordsToHighlight);
   }
-  
-  console.log('🔍 MarkdownPreview after highlighting:', highlightedHtml.substring(0, 200));
 
 
   // Handle word clicks in preview mode
