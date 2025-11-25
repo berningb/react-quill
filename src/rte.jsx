@@ -13,7 +13,9 @@ export const RichTextEditor = ({
   hideModeSwitcher = false,
   highlightWords = [],
   highlightWordColors = null,
-  onWordClick = null
+  onWordClick = null,
+  forcePreview = null,
+  onPreviewChange = null
 }) => {
   // Refs for editor elements
   const editorRef = useRef(null);
@@ -23,6 +25,20 @@ export const RichTextEditor = ({
   // Editor state
   const [mode, setMode] = useState(initialMode);
   const [showPreview, setShowPreview] = useState(false);
+  
+  // Handle external preview control
+  useEffect(() => {
+    if (forcePreview !== null) {
+      setShowPreview(forcePreview);
+    }
+  }, [forcePreview]);
+  
+  // Notify parent of preview state changes
+  useEffect(() => {
+    if (onPreviewChange) {
+      onPreviewChange(showPreview);
+    }
+  }, [showPreview, onPreviewChange]);
   
   const [state, setState] = useState({
     content: initialContent,
@@ -49,9 +65,6 @@ export const RichTextEditor = ({
     if (mode === 'wysiwyg' && editorRef.current) {
       // Use innerHTML for consistency with handleInput
       const html = editorRef.current.innerHTML;
-      console.log('🔍🔍🔍 getCurrentHtml - HTML length:', html.length);
-      console.log('🔍🔍🔍 getCurrentHtml - Contains style=:', html.includes('style='));
-      console.log('🔍🔍🔍 getCurrentHtml - HTML:', html.substring(0, 500));
       return html;
     }
     return state.html;
@@ -310,23 +323,16 @@ export const RichTextEditor = ({
   // Toggle between modes
   const toggleMode = useCallback((action) => {
     if (action === 'preview') {
-      console.log('🔍🔍🔍 TOGGLE PREVIEW CLICKED - current showPreview:', showPreview);
-      console.log('🔍🔍🔍 Editor ref exists:', !!editorRef.current);
-      
       // When toggling preview ON, capture the current HTML from the editor
       if (!showPreview && editorRef.current && mode === 'wysiwyg') {
         const html = getCurrentHtml();
-        console.log('🔍🔍🔍 Capturing HTML for preview:', html.substring(0, 200));
         setState(prev => ({
           ...prev,
           html: html || prev.html,
         }));
       }
       
-      setShowPreview(prev => {
-        console.log('🔍🔍🔍 Setting showPreview to:', !prev);
-        return !prev;
-      });
+      setShowPreview(prev => !prev);
       return;
     }
     
@@ -383,7 +389,6 @@ export const RichTextEditor = ({
   useEffect(() => {
     // When switching from preview (true) to edit (false) in wysiwyg mode
     if (mode === 'wysiwyg' && prevShowPreviewRef.current === true && !showPreview && editorRef.current && state.html) {
-      console.log('🔍🔍🔍 Restoring HTML to editor:', state.html.substring(0, 100));
       editorRef.current.innerHTML = state.html;
       if (currentLineSpacing) {
         editorRef.current.style.lineHeight = currentLineSpacing;
